@@ -19,9 +19,16 @@ class App extends Component{
     this.state = {
       input: '',
       imageUrl: '',
-      box: {},
+      box: [],
       route: 'signin',
       isSignedIn: false,
+      user: {
+        id: "",
+        email: '',
+        name: '',
+        entries: 0,
+        joined: ''
+      }
     }
   }
 
@@ -30,22 +37,34 @@ class App extends Component{
   }
 
 calculateFaceLocation = (data) => {
-  const clarifaiFace = data.outputs[0].data.regions[0].region_info.bounding_box;
+  const clarifaiFace = data.outputs[0].data.regions.map(region => region.region_info.bounding_box);
   console.log(clarifaiFace);
   const image = document.getElementById('inputimage')
   const width = Number(image.width);
   const height = Number(image.height);
-  return {
-    leftCol: clarifaiFace.left_col * width,
-    topRow: clarifaiFace.top_row * height,
-    rightCol: width - (clarifaiFace.right_col * width),
-    bottomRow: height - (clarifaiFace.bottom_row * height),
-  }
+
+  return clarifaiFace.map(face => {
+    return {
+      leftCol: face.left_col * width,
+      topRow: face.top_row * height,
+      rightCol: width - (face.right_col * width),
+      bottomRow: height - (face.bottom_row * height),
+    }
+  }) ;
+}
+
+loadUser = (data) => {
+  this.setState({user: {
+      id: data.id,
+      email: data.email,
+      name: data.name,
+      entries: data.entries,
+      joined: data.joined
+  }})
 }
 
 displayFaceBox = (box) =>{
   this.setState({box : box})
-  console.log(box)
 }
 
 onButtonSubmit = () => {
@@ -56,8 +75,26 @@ onButtonSubmit = () => {
       version: '45fb9a671625463fa646c3523a3087d5'},
       this.state.input
       )
-      .then(response => this.displayFaceBox(this.calculateFaceLocation(response)))
+      .then(response =>  {
+        if (response) {
+          console.log(this.state.user.id)
+          fetch('http://localhost:3000/image', {
+            method: 'put',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              id: this.state.user.id
+
+            }) 
+          })
+          .then(response => response.json())
+          .then(count => {
+            this.setState(Object.assign(this.state.user, { entries: count }))
+          })
+        }
+        this.displayFaceBox(this.calculateFaceLocation(response))
+      })
       .catch(error => console.log(error));
+    
 }
 
 OnRouteChange = (route) => {
@@ -78,14 +115,14 @@ OnRouteChange = (route) => {
             <Logo />
             <ImageLinkForm onInputChange={this.onInputChange} 
               onButtonSubmit={this.onButtonSubmit}/>
-            <Rank />
+            <Rank name={this.state.user.name} entries={this.state.user.entries}/>
             <FaceRecognition box={this.state.box} imageUrl={this.state.imageUrl}/>
           </div>
         : (
           this.state.route === 'signin'
           )
-        ? <Signin onRouteChange={this.OnRouteChange}/>
-        : <Register onRouteChange={this.OnRouteChange}/>
+        ? <Signin loadUser={this.loadUser} onRouteChange={this.OnRouteChange}/>
+        : <Register loadUser={this.loadUser} onRouteChange={this.OnRouteChange}/>
       }
       </div>
       )
